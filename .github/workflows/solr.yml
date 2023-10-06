@@ -1,0 +1,52 @@
+name: Solr Test
+
+#  see https://www.liip.ch/en/blog/how-to-use-a-custom-solr-schema-when-testing-code-with-github-actions
+on:
+  push:
+    branches:
+      - master  # Change this to your main branch name
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker
+      uses: actions/setup-docker@v2
+
+    - name: Copy custom Solr configuration
+      run: |
+        docker run --rm -v "$(pwd)/SolrCloud/solr_config" alpine sh -c "cp -r /config/* /var/solr/data/mycollection/conf"
+      working-directory: ${{ github.workspace }}
+
+    - name: Start Solr container
+      run: |
+        docker run -d --name solr-container -p 8983:8983 -t solr:9.2.1
+        sleep 10  # Allow Solr container to start
+      continue-on-error: true  # Continue even if Solr container fails to start
+
+    - name: Wait for Solr to be ready
+      run: |
+        until $(curl --output /dev/null --silent --head --fail http://localhost:8983/solr); do
+          echo "Waiting for Solr to start..."
+          sleep 5
+        done
+
+    - name: Install Bats
+      run: |
+        git clone https://github.com/bats-core/bats-core.git
+        cd bats-core
+        ./install.sh /usr/local
+      working-directory: ${{ github.workspace }}
+
+    - name: Run Solr tests using Bats
+      run: |
+        # Add commands to run your Solr tests using Bats
+        # For example: ./tests/*.bats
+      working-directory: ${{ github.workspace }}
+
+    - name: Stop and remove Solr container
+      run: docker stop solr-container && docker rm solr-container
